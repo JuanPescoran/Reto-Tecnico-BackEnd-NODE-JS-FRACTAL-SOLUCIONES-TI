@@ -5,51 +5,48 @@ import db from './mysqlConnection.js';
 
 /**
  * Implementación del repositorio de órdenes para MySQL.
- * Maneja operaciones complejas como transacciones y carga de relaciones (joins).
+ * Maneja operaciones complejas como transacciones y carga de relaciones.
  */
 class MySQLOrderRepository extends IOrderRepository {
     /**
      * Obtiene todas las órdenes, incluyendo sus productos asociados.
-     * Utiliza una estrategia eficiente para evitar el problema N+1.
+     * Utiliza una estrategia eficiente para evitar el problema de N+1 consultas.
      * @returns {Promise<Order[]>} Un array de entidades Order completas.
      */
     async getAll() {
-        // 1. Obtenemos todas las órdenes principales.
+        // 1. Obtener todas las órdenes principales.
         const [orderRows] = await db.query('SELECT * FROM orders ORDER BY date DESC');
         if (orderRows.length === 0) {
             return [];
         }
 
-        // 2. Obtenemos TODOS los productos de TODAS las órdenes en una sola consulta eficiente.
+        // 2. Obtener TODOS los productos de TODAS las órdenes en una sola consulta.
         const orderIds = orderRows.map(o => o.id);
         const [productRows] = await db.query('SELECT * FROM order_products WHERE orderId IN (?)', [orderIds]);
 
-        // 3. (LA CORRECCIÓN CLAVE) Agrupamos los productos por su orderId para una búsqueda rápida.
+        // 3. Agrupar los productos por su orderId en un mapa para una búsqueda rápida.
         const productsByOrderId = productRows.reduce((acc, product) => {
-            if (!acc[product.orderId]) {
-                acc[product.orderId] = [];
+            const orderId = product.orderId;
+            if (!acc[orderId]) {
+                acc[orderId] = [];
             }
-            acc[product.orderId].push(new OrderProduct(
-                product.id,
-                product.orderId,
-                product.productId,
-                product.productName,
-                product.productPrice,
-                product.quantity,
-                product.totalPrice
+            acc[orderId].push(new OrderProduct(
+                product.id, product.orderId, product.productId,
+                product.productName, product.productPrice, product.quantity, product.totalPrice
             ));
             return acc;
         }, {});
 
-        // 4. Mapeamos cada orden y le asignamos su array de productos correspondiente.
+        // 4. Construir las entidades Order completas, asignando a cada una su array de productos y su finalPrice.
         return orderRows.map(orderRow => {
-            const productsForOrder = productsByOrderId[orderRow.id] || []; // Usamos el mapa para encontrar los productos
+            const productsForOrder = productsByOrderId[orderRow.id] || [];
             return new Order(
                 orderRow.id,
                 orderRow.orderNumber,
                 orderRow.date,
                 orderRow.status,
-                productsForOrder
+                productsForOrder,
+                orderRow.finalPrice // <-- CORRECCIÓN CLAVE: Pasar el finalPrice a la entidad
             );
         });
     }
@@ -69,7 +66,14 @@ class MySQLOrderRepository extends IOrderRepository {
         const products = productRows.map(p => new OrderProduct(p.id, p.orderId, p.productId, p.productName, p.productPrice, p.quantity, p.totalPrice));
 
         const orderRow = orderRows[0];
-        return new Order(orderRow.id, orderRow.orderNumber, orderRow.date, orderRow.status, products);
+        return new Order(
+            orderRow.id,
+            orderRow.orderNumber,
+            orderRow.date,
+            orderRow.status,
+            products,
+            orderRow.finalPrice // <-- CORRECCIÓN CLAVE: Pasar el finalPrice a la entidad
+        );
     }
 
     /**
@@ -99,7 +103,6 @@ class MySQLOrderRepository extends IOrderRepository {
             }
 
             await connection.commit();
-            // Usamos findById para obtener la representación completa y consistente de la orden creada.
             return this.findById(orderId);
 
         } catch (error) {
