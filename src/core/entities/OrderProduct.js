@@ -1,0 +1,2 @@
+class OrderProduct { constructor(id, orderId, productId, productName, productPrice, quantity, totalPrice) { this.id = id; this.orderId = orderId; this.productId = productId; this.productName = productName; this.productPrice = productPrice; this.quantity = quantity; this.totalPrice = totalPrice; } }
+export default OrderProduct;

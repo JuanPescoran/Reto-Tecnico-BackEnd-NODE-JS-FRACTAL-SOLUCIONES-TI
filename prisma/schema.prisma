@@ -1,0 +1,51 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id    Int     @id @default(autoincrement())
+  name  String
+  price Float
+
+  // Relación: Un producto puede estar en muchas líneas de pedido
+  orderProducts OrderProduct[]
+}
+
+model Order {
+  id          Int      @id @default(autoincrement())
+  orderNumber String   @unique
+  date        DateTime @default(now())
+  status      Status   @default(Pending)
+  finalPrice  Float
+
+  // Relación: Una orden tiene muchas líneas de producto
+  Products    OrderProduct[]
+}
+
+model OrderProduct {
+  id           Int    @id @default(autoincrement())
+  productName  String
+  productPrice Float
+  quantity     Int
+  totalPrice   Float
+
+  // Relaciones con claves foráneas
+  order   Order @relation(fields: [orderId], references: [id])
+  orderId Int
+
+  product   Product @relation(fields: [productId], references: [id])
+  productId Int
+}
+
+enum Status {
+  Pending
+  InProgress
+  Completed
+}
